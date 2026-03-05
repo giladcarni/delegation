@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delegation Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #22263a;
+    --border: #2d3148;
+    --accent: #4f6ef7;
+    --accent2: #6c8aff;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --purple: #a855f7;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --radius: 10px;
+    --sidebar-width: 230px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; font-size: 14px; }
+
+  /* SIDEBAR */
+  #sidebar {
+    width: var(--sidebar-width); min-width: var(--sidebar-width); background: var(--bg2);
+    border-right: 1px solid var(--border); height: 100vh; position: sticky; top: 0;
+    overflow-y: auto; display: flex; flex-direction: column; z-index: 100;
+    transition: transform 0.25s;
+  }
+  .sidebar-logo { padding: 18px 16px 10px; border-bottom: 1px solid var(--border); }
+  .sidebar-logo h1 { font-size: 15px; font-weight: 700; color: var(--text); }
+  .sidebar-logo p { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .sidebar-section { padding: 10px 8px 4px; font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 7px;
+    margin: 1px 6px; cursor: pointer; color: var(--text2); font-size: 13px;
+    transition: all .15s; user-select: none;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: rgba(79,110,247,.18); color: var(--accent2); font-weight: 600; }
+  .nav-badge { margin-left: auto; background: var(--bg3); color: var(--text3); font-size: 10px; padding: 1px 6px; border-radius: 20px; }
+  .nav-item.active .nav-badge { background: rgba(79,110,247,.3); color: var(--accent2); }
+  .sync-area { margin-top: auto; padding: 12px 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+  .sync-btn { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 7px; cursor: pointer; font-size: 12px; color: var(--text2); background: var(--bg3); border: none; width: 100%; text-align: left; transition: all .15s; }
+  .sync-btn:hover { background: var(--border); color: var(--text); }
+
+  /* MAIN */
+  #main { flex: 1; overflow-y: auto; min-width: 0; }
+  .page { display: none; padding: 24px; max-width: 1400px; }
+  .page.active { display: block; }
+  .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .page-title { font-size: 20px; font-weight: 700; flex: 1; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--bg3); color: var(--text); }
+
+  /* DASHBOARD STATS */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .stat-value { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+  .stat-label { font-size: 12px; color: var(--text3); }
+
+  /* TABLES */
+  .table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); gap: 10px; flex-wrap: wrap; }
+  .table-title { font-size: 15px; font-weight: 600; }
+  .filter-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, input[type=text], input[type=date], input[type=time], input[type=email], input[type=tel], input[type=number], textarea {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 7px;
+    color: var(--text); padding: 7px 10px; font-size: 13px; outline: none;
+    transition: border .15s;
+  }
+  select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+  select { cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 12px 14px; border-bottom: 1px solid rgba(45,49,72,.5); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .empty-row td { text-align: center; color: var(--text3); padding: 32px; }
+
+  /* STATUS BADGES */
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-booked { background: rgba(79,110,247,.2); color: var(--accent2); }
+  .badge-confirmed { background: rgba(34,197,94,.2); color: var(--green); }
+  .badge-progress { background: rgba(234,179,8,.2); color: var(--yellow); }
+  .badge-tentative { background: rgba(148,163,184,.15); color: var(--text2); }
+  .badge-completed { background: rgba(34,197,94,.15); color: #4ade80; }
+  .badge-billed { background: rgba(168,85,247,.2); color: var(--purple); }
+  .badge-paid { background: rgba(34,197,94,.3); color: #16a34a; }
+  .badge-cancelled { background: rgba(239,68,68,.2); color: var(--red); }
+
+  /* ACTION ICONS */
+  .action-btns { display: flex; gap: 5px; }
+  .icon-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 13px; transition: all .15s; }
+  .icon-btn:hover { background: var(--border); color: var(--text); }
+  .icon-btn.delete:hover { background: rgba(239,68,68,.2); border-color: var(--red); color: var(--red); }
+
+  /* MODALS */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg2); z-index: 1; }
+  .modal-head h2 { font-size: 16px; font-weight: 700; }
+  .modal-close { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 16px; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 20px; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 16px 20px; border-top: 1px solid var(--border); }
+  .form-group { margin-bottom: 14px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 5px; font-weight: 500; }
+  input[type=text], input[type=date], input[type=time], input[type=email], input[type=tel], input[type=number], textarea, select { width: 100%; }
+  textarea { resize: vertical; min-height: 70px; }
+  .form-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text3); letter-spacing: .07em; margin-bottom: 12px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+  .checkbox-row input { width: auto; }
+  .radio-group { display: flex; gap: 12px; }
+  .radio-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
+  .radio-label input { width: auto; }
+  .currency-wrap { display: flex; gap: 6px; }
+  .currency-wrap select { width: 80px; flex-shrink: 0; }
+
+  /* COMPANY CARDS */
+  .company-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; padding: 16px; }
+  .company-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; transition: all .15s; }
+  .company-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .company-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .company-meta { font-size: 12px; color: var(--text3); display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .company-contact { font-size: 12px; color: var(--text2); }
+
+  /* TOAST */
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+  .toast-msg { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; font-size: 13px; animation: slideIn .2s ease; display: flex; align-items: center; gap: 8px; min-width: 220px; }
+  .toast-msg.success { border-color: var(--green); color: var(--green); }
+  .toast-msg.error { border-color: var(--red); color: var(--red); }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+  /* SUPABASE STATUS */
+  #sb-status { position: fixed; top: 12px; right: 16px; font-size: 11px; background: var(--bg2); border: 1px solid var(--border); padding: 4px 10px; border-radius: 20px; color: var(--text3); z-index: 200; display: flex; align-items: center; gap: 5px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); }
+  .status-dot.ok { background: var(--green); }
+  .status-dot.err { background: var(--red); }
+  .status-dot.loading { background: var(--yellow); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+  /* RESTORE MODAL */
+  #restore-modal textarea { font-family: monospace; font-size: 11px; }
+
+  /* MOBILE */
+  #mobile-toggle { display: none; position: fixed; top: 12px; left: 12px; z-index: 300; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 18px; color: var(--text); }
+  @media (max-width: 768px) {
+    #mobile-toggle { display: block; }
+    #sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); }
+    #sidebar.open { transform: translateX(0); }
+    .page { padding: 60px 12px 20px; }
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<button id="mobile-toggle" onclick="toggleSidebar()">☰</button>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    <h1>Delegation Manager</h1>
+    <p>Israel Operations</p>
+  </div>
+
+  <div class="sidebar-section">Overview</div>
+  <div class="nav-item active" onclick="showPage('dashboard',this)">📊 Dashboard</div>
+
+  <div class="sidebar-section">Bookings</div>
+  <div class="nav-item" onclick="showPage('all-bookings',this)">📅 All Bookings <span class="nav-badge" id="nb-all">0</span></div>
+  <div class="nav-item" onclick="showPage('delegation-bookings',this)">📋 Delegation Bookings <span class="nav-badge" id="nb-del">0</span></div>
+  <div class="nav-item" onclick="showPage('upcoming',this)">🗓 Upcoming</div>
+  <div class="nav-item" onclick="showPage('awaiting-payment',this)">💸 Awaiting Payment <span class="nav-badge" id="nb-awaiting">0</span></div>
+  <div class="nav-item" onclick="showPage('paid',this)">✅ Paid <span class="nav-badge" id="nb-paid">0</span></div>
+  <div class="nav-item" onclick="showPage('speaking',this)">🎤 Speaking <span class="nav-badge" id="nb-speaking">0</span></div>
+
+  <div class="sidebar-section">Directory</div>
+  <div class="nav-item" onclick="showPage('companies',this)">🏢 All Companies <span class="nav-badge" id="nb-companies">0</span></div>
+  <div class="nav-item" onclick="showCompanyCat('Technology')">💻 Tech / Startups</div>
+  <div class="nav-item" onclick="showCompanyCat('Security')">🛡 Defense / Security</div>
+  <div class="nav-item" onclick="showCompanyCat('Agriculture')">🌾 Agriculture</div>
+  <div class="nav-item" onclick="showCompanyCat('Speaker')">🎤 Speakers</div>
+  <div class="nav-item" onclick="showCompanyCat('Venue')">📍 Venues / Spaces</div>
+  <div class="nav-item" onclick="showCompanyCat('Finance')">💰 Finance / VC</div>
+  <div class="nav-item" onclick="showCompanyCat('Client')">🤝 Clients / Partners</div>
+
+  <div class="sidebar-section">By Region</div>
+  <div class="nav-item" onclick="showCompanyRegion('North')">🗺 North</div>
+  <div class="nav-item" onclick="showCompanyRegion('Central')">🗺 Central (TLV)</div>
+  <div class="nav-item" onclick="showCompanyRegion('Jerusalem')">🗺 Jerusalem</div>
+  <div class="nav-item" onclick="showCompanyRegion('South')">🗺 South</div>
+  <div class="nav-item" onclick="showCompanyRegion('International')">✈️ International</div>
+
+  <div class="sync-area">
+    <button class="sync-btn" onclick="copyBackup()">📤 Copy Backup Code</button>
+    <button class="sync-btn" onclick="openRestore()">📥 Restore from Code</button>
+    <div style="font-size:10px;color:var(--text3);text-align:center;padding:4px 0;" id="last-sync-label">Not synced yet</div>
+  </div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main id="main">
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <div class="page-title">Dashboard</div>
+      <button class="btn btn-ghost btn-sm" onclick="exportPayments()">💳 Export Payments</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportAll()">📥 Export All</button>
+      <button class="btn btn-primary btn-sm" onclick="openBookingModal()">+ New Booking</button>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value" id="stat-total">0</div><div class="stat-label">📅 Total Bookings</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-upcoming" style="color:var(--accent2)">0</div><div class="stat-label">🗓 Upcoming</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-paid" style="color:var(--green)">0</div><div class="stat-label">✅ Paid</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-awaiting" style="color:var(--yellow)">0</div><div class="stat-label">💸 Awaiting Payment</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-speaking" style="color:var(--purple)">0</div><div class="stat-label">🎤 Speaking</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-companies" style="color:var(--text2)">0</div><div class="stat-label">🏢 Companies</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-header"><div class="table-title">🗓 Recent Bookings & Speaking</div></div>
+      <table><thead><tr><th>Type</th><th>Client</th><th>Date</th><th>Company/Event</th><th>Status</th><th>Rate</th></tr></thead>
+      <tbody id="dash-bookings-body"><tr class="empty-row"><td colspan="6">No bookings yet</td></tr></tbody></table>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-header"><div class="table-title">💸 Payments Due</div></div>
+      <table><thead><tr><th>Client</th><th>Date</th><th>Company</th><th>Rate</th><th>Status</th></tr></thead>
+      <tbody id="dash-payments-body"><tr class="empty-row"><td colspan="5">No pending payments</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- DELEGATION BOOKINGS -->
+  <div class="page" id="page-delegation-bookings">
+    <div class="page-header">
+      <div class="page-title">Delegation Bookings</div>
+      <button class="btn btn-ghost btn-sm" onclick="exportDelBookings()">📥 Export Excel</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportPayments()">💳 Payments</button>
+      <button class="btn btn-primary btn-sm" onclick="openBookingModal()">+ New Booking</button>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="filter-row">
+          <select id="del-status-filter" onchange="renderDelBookings()"><option value="">All Statuses</option><option>Booked</option><option>In Progress</option><option>Tentative</option><option>Completed</option><option>Billed</option><option>Paid</option><option>Cancelled</option></select>
+          <select id="del-company-filter" onchange="renderDelBookings()"><option value="">All Companies</option></select>
+          <select id="del-client-filter" onchange="renderDelBookings()"><option value="">All Clients</option></select>
+          <select id="del-sort" onchange="renderDelBookings()"><option value="asc">Soonest first</option><option value="desc">Latest first</option></select>
+          <button class="btn btn-ghost btn-sm" onclick="clearDelFilters()">Clear</button>
+        </div>
+      </div>
+      <table><thead><tr><th>Client / Contact</th><th>Date & Time</th><th>Company</th><th>Group</th><th>Status</th><th>Rate</th><th>Billed</th><th>Paid</th><th>Actions</th></tr></thead>
+      <tbody id="del-bookings-body"><tr class="empty-row"><td colspan="9">No delegation bookings yet</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- ALL BOOKINGS -->
+  <div class="page" id="page-all-bookings">
+    <div class="page-header">
+      <div class="page-title">All Bookings</div>
+      <button class="btn btn-ghost btn-sm" onclick="exportAll()">📥 Export All</button>
+      <button class="btn btn-primary btn-sm" onclick="openBookingModal()">+ New Delegation</button>
+      <button class="btn btn-secondary btn-sm" onclick="openSpeakingModal()">+ New Speaking</button>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="filter-row">
+          <select id="all-type-filter" onchange="renderAllBookings()"><option value="">All Types</option><option>Delegation</option><option>Speaking</option></select>
+          <select id="all-status-filter" onchange="renderAllBookings()"><option value="">All Statuses</option><option>Booked</option><option>Confirmed</option><option>In Progress</option><option>Tentative</option><option>Completed</option><option>Cancelled</option></select>
+          <select id="all-sort" onchange="renderAllBookings()"><option value="asc">Soonest first</option><option value="desc">Latest first</option></select>
+          <button class="btn btn-ghost btn-sm" onclick="clearAllFilters()">Clear</button>
+        </div>
+      </div>
+      <table><thead><tr><th>Type</th><th>Client / Contact</th><th>Date & Time</th><th>Event / Group</th><th>Status</th><th>Rate</th><th>Billed</th><th>Paid</th><th>Actions</th></tr></thead>
+      <tbody id="all-bookings-body"><tr class="empty-row"><td colspan="9">No bookings yet</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- UPCOMING -->
+  <div class="page" id="page-upcoming">
+    <div class="page-header"><div class="page-title">🗓 Upcoming</div></div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Type</th><th>Client</th><th>Date & Time</th><th>Company/Event</th><th>Status</th><th>Rate</th><th>Actions</th></tr></thead>
+      <tbody id="upcoming-body"><tr class="empty-row"><td colspan="7">No upcoming bookings</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- AWAITING PAYMENT -->
+  <div class="page" id="page-awaiting-payment">
+    <div class="page-header"><div class="page-title">💸 Awaiting Payment</div></div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Client</th><th>Date</th><th>Company/Event</th><th>Rate</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="awaiting-body"><tr class="empty-row"><td colspan="6">No pending payments</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- PAID -->
+  <div class="page" id="page-paid">
+    <div class="page-header">
+      <div class="page-title">✅ Paid</div>
+      <button class="btn btn-ghost btn-sm" onclick="exportPayments()">📥 Export Payments</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Client</th><th>Date</th><th>Company/Event</th><th>Rate</th><th>Actions</th></tr></thead>
+      <tbody id="paid-body"><tr class="empty-row"><td colspan="5">No paid bookings yet</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- SPEAKING -->
+  <div class="page" id="page-speaking">
+    <div class="page-header">
+      <div class="page-title">🎤 Speaking Engagements</div>
+      <button class="btn btn-ghost btn-sm" onclick="exportSpeaking()">📥 Export Excel</button>
+      <button class="btn btn-primary btn-sm" onclick="openSpeakingModal()">+ Add Speaking Gig</button>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="filter-row">
+          <select id="sp-type-filter" onchange="renderSpeaking()"><option value="">All Types</option><option>Keynote</option><option>Panel</option><option>Conference</option><option>Podcast</option><option>Webinar</option><option>Workshop</option><option>Speaker</option><option>Other</option></select>
+          <select id="sp-status-filter" onchange="renderSpeaking()"><option value="">All Statuses</option><option>Confirmed</option><option>Tentative</option><option>Completed</option><option>Billed</option><option>Paid</option><option>Cancelled</option></select>
+          <select id="sp-sort" onchange="renderSpeaking()"><option value="desc">Latest first</option><option value="asc">Soonest first</option></select>
+          <button class="btn btn-ghost btn-sm" onclick="clearSpFilters()">Clear</button>
+        </div>
+      </div>
+      <table><thead><tr><th>Client / Contact</th><th>Event / Topic</th><th>Type</th><th>Date & Time</th><th>Location</th><th>Status</th><th>Rate</th><th>Billed</th><th>Paid</th><th>Actions</th></tr></thead>
+      <tbody id="speaking-body"><tr class="empty-row"><td colspan="10">No speaking engagements yet</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- COMPANIES -->
+  <div class="page" id="page-companies">
+    <div class="page-header">
+      <div class="page-title">Company Directory</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn btn-ghost btn-sm" id="grid-view-btn" onclick="setCompanyView('grid')">⊞</button>
+        <button class="btn btn-ghost btn-sm" id="list-view-btn" onclick="setCompanyView('list')">☰</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="exportCompanies()">📥 Export Excel</button>
+      <button class="btn btn-primary btn-sm" onclick="openCompanyModal()">+ Add Company</button>
+    </div>
+    <div class="table-wrap" style="overflow:visible;">
+      <div class="table-header">
+        <div class="filter-row">
+          <select id="co-cat-filter" onchange="renderCompanies()"><option value="">All Categories</option><option>Technology</option><option>Security</option><option>Agriculture</option><option>Finance</option><option>Speaker</option><option>Venue</option><option>Space</option><option>Tour</option><option>Client</option><option>Other</option></select>
+          <select id="co-region-filter" onchange="renderCompanies()"><option value="">All Regions</option><option>North</option><option>Central</option><option>Jerusalem</option><option>South</option><option>International</option></select>
+          <select id="co-city-filter" onchange="renderCompanies()"><option value="">All Cities</option></select>
+          <button class="btn btn-ghost btn-sm" onclick="clearCoFilters()">Clear</button>
+        </div>
+      </div>
+      <div id="companies-container"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- SUPABASE STATUS -->
+<div id="sb-status"><div class="status-dot loading" id="sb-dot"></div><span id="sb-label">Connecting…</span></div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast"></div>
+
+<!-- BOOKING MODAL -->
+<div class="modal-overlay" id="booking-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="booking-modal-title">New Booking</h2>
+      <button class="modal-close" onclick="closeModal('booking-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="bk-id">
+      <div class="section-label">Client & Contact</div>
+      <div class="form-group"><label>Client / Organization</label><input type="text" id="bk-client"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Contact Name *</label><input type="text" id="bk-contact"></div>
+        <div class="form-group"><label>Email</label><input type="email" id="bk-email"></div>
+      </div>
+      <div class="form-group"><label>Phone</label><input type="tel" id="bk-phone"></div>
+      <div class="form-group"><label>Delegation Description</label><textarea id="bk-desc"></textarea></div>
+      <hr class="form-divider">
+      <div class="section-label">Visit Details</div>
+      <div class="form-row">
+        <div class="form-group"><label>Date</label><input type="date" id="bk-date"></div>
+        <div class="form-group"><label>Time</label><input type="time" id="bk-time"></div>
+      </div>
+      <div class="form-group"><label>Company / Venue</label><select id="bk-company-select"><option value="">Select from directory…</option></select></div>
+      <div class="form-group"><label>Or Custom Name</label><input type="text" id="bk-company-custom"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Presenter</label><input type="text" id="bk-presenter"></div>
+        <div class="form-group"><label>Address</label><input type="text" id="bk-address"></div>
+      </div>
+      <hr class="form-divider">
+      <div class="section-label">Booking Status</div>
+      <div class="form-group">
+        <label>Booking confirmed?</label>
+        <div class="radio-group">
+          <label class="radio-label"><input type="radio" name="bk-confirmed" value="1" checked> ✅ Booked</label>
+          <label class="radio-label"><input type="radio" name="bk-confirmed" value="0"> ⏳ Not Yet Booked</label>
+        </div>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select id="bk-status"><option>Booked</option><option>In Progress</option><option>Tentative</option><option>Completed</option><option>Cancelled</option><option>Billed</option><option>Paid</option></select>
+      </div>
+      <div class="form-group"><label>Rate</label>
+        <div class="currency-wrap">
+          <select id="bk-currency"><option>USD</option><option>NIS</option><option>EUR</option></select>
+          <input type="number" id="bk-rate" placeholder="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="checkbox-row"><input type="checkbox" id="bk-billed"> Billed? Invoice sent</label>
+        <label class="checkbox-row"><input type="checkbox" id="bk-paid"> Paid? Payment received</label>
+      </div>
+      <div class="form-group" style="margin-top:12px;"><label>Comments</label><textarea id="bk-comments"></textarea></div>
+      <div class="form-group"><label>🗂 Workflow / Logistics</label><textarea id="bk-workflow"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('booking-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBooking()">Save Booking</button>
+    </div>
+  </div>
+</div>
+
+<!-- SPEAKING MODAL -->
+<div class="modal-overlay" id="speaking-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="speaking-modal-title">New Speaking Engagement</h2>
+      <button class="modal-close" onclick="closeModal('speaking-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sp-id">
+      <div class="section-label">Event Details</div>
+      <div class="form-group"><label>Event / Conference Name *</label><input type="text" id="sp-event"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Type</label>
+          <select id="sp-type"><option>Keynote</option><option>Panel</option><option>Conference</option><option>Podcast</option><option>Webinar</option><option>Workshop</option><option>Speaker</option><option>Other</option></select>
+        </div>
+        <div class="form-group"><label>Topic / Talk Title</label><input type="text" id="sp-topic"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Date</label><input type="date" id="sp-date"></div>
+        <div class="form-group"><label>Time</label><input type="time" id="sp-time"></div>
+      </div>
+      <div class="form-group"><label>Location / Venue</label><input type="text" id="sp-location"></div>
+      <hr class="form-divider">
+      <div class="section-label">Client / Organizer</div>
+      <div class="form-group"><label>Client / Organization *</label><input type="text" id="sp-client"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Contact Name</label><input type="text" id="sp-contact"></div>
+        <div class="form-group"><label>Contact Email</label><input type="email" id="sp-contact-email"></div>
+      </div>
+      <div class="form-group"><label>Contact Phone</label><input type="tel" id="sp-contact-phone"></div>
+      <hr class="form-divider">
+      <div class="section-label">Booking Status</div>
+      <div class="form-group"><label>Status</label>
+        <select id="sp-status"><option>Confirmed</option><option>Tentative</option><option>Completed</option><option>Cancelled</option><option>Billed</option><option>Paid</option></select>
+      </div>
+      <div class="form-group"><label>Rate / Fee</label>
+        <div class="currency-wrap">
+          <select id="sp-currency"><option>USD</option><option>NIS</option><option>EUR</option></select>
+          <input type="number" id="sp-rate" placeholder="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="checkbox-row"><input type="checkbox" id="sp-billed"> Billed?</label>
+        <label class="checkbox-row"><input type="checkbox" id="sp-paid"> Paid?</label>
+      </div>
+      <div class="form-group" style="margin-top:12px;"><label>Notes / Prep</label><textarea id="sp-notes"></textarea></div>
+      <div class="form-group"><label>🗂 Workflow / Logistics</label><textarea id="sp-workflow"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('speaking-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSpeaking()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- COMPANY MODAL -->
+<div class="modal-overlay" id="company-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Add Company</h2>
+      <button class="modal-close" onclick="closeModal('company-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="co-id">
+      <div class="form-group"><label>Name *</label><input type="text" id="co-name"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Category</label>
+          <select id="co-category"><option>Technology</option><option>Security</option><option>Agriculture</option><option>Finance</option><option>Speaker</option><option>Venue</option><option>Space</option><option>Tour</option><option>Client</option><option>Other</option></select>
+        </div>
+        <div class="form-group"><label>Region</label>
+          <select id="co-region"><option value="">Auto detect</option><option>North</option><option>Central</option><option>Jerusalem</option><option>South</option><option>International</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>City / Location</label><input type="text" id="co-city"></div>
+        <div class="form-group"><label>Address</label><input type="text" id="co-address"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Contact Person</label><input type="text" id="co-contact"></div>
+        <div class="form-group"><label>Phone</label><input type="tel" id="co-phone"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Email</label><input type="email" id="co-email"></div>
+        <div class="form-group"><label>Website</label><input type="text" id="co-website"></div>
+      </div>
+      <div class="form-group"><label>Notes</label><textarea id="co-notes"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('company-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCompany()">Save Company</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESTORE MODAL -->
+<div class="modal-overlay" id="restore-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-head">
+      <h2>Paste Your Backup Code</h2>
+      <button class="modal-close" onclick="closeModal('restore-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text2);font-size:13px;margin-bottom:12px;">To sync your data to this device, paste the backup code you copied from your other device.</p>
+      <textarea id="restore-input" style="height:160px;font-family:monospace;font-size:11px;" placeholder="Paste backup code here…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('restore-modal')">Close</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyAllData()">📋 Copy All</button>
+      <button class="btn btn-primary" onclick="restoreData()">Restore Data</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== JAVASCRIPT ===================== -->
+<script>
+// ─── CONFIG ───────────────────────────────────────────────
+const SUPABASE_URL = 'https://miyiklhslbfvwnpozjbh.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_B-1ukjQbdpMT44jLDBqkvg_2SFa0EM1';
+
+// ─── SUPABASE REST HELPER ─────────────────────────────────
+// The sb_publishable_ key must go in the "apikey" header.
+// It must NOT be used as a Bearer token in Authorization.
+async function sbFetch(table, method = 'GET', body = null, query = '') {
+  const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': method === 'POST' ? 'return=representation' : 'return=representation'
+  };
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Supabase ${method} ${table}: ${res.status} ${err}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+async function sbSelect(table, query = '') {
+  return sbFetch(table, 'GET', null, `?select=*${query ? '&' + query : ''}&order=created_at.desc`);
+}
+
+async function sbInsert(table, row) {
+  return sbFetch(table, 'POST', row);
+}
+
+async function sbUpdate(table, id, row) {
+  return sbFetch(table, 'PATCH', row, `?id=eq.${id}`);
+}
+
+async function sbDelete(table, id) {
+  return sbFetch(table, 'DELETE', null, `?id=eq.${id}`);
+}
+
+async function sbUpsert(table, row) {
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'resolution=merge-duplicates,return=representation'
+  };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST', headers, body: JSON.stringify(row)
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Supabase upsert ${table}: ${res.status} ${err}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+// ─── LOCAL STATE ──────────────────────────────────────────
+let bookings = [];   // delegation bookings
+let speaking = [];   // speaking engagements
+let companies = [];  // company directory
+let supabaseOk = false;
+let companyView = 'grid';
+let editingBookingId = null;
+let editingSpeakingId = null;
+let editingCompanyId = null;
+
+// ─── SEED DATA (backup from 2026-03-05) ───────────────────
+const SEED_DATA = {"bookings":[{"id":"mm22ydckrajz","org":"Keren Hayesod","contact":"Nina Salman","email":"Nina@khuia.org","phone":"050-595-8380","group":"50 Donors from Australia","date":"2026-04-20","time":"13:00-14:15","company":"WaterGen","presenter":"Anna Chernyavsky","address":"Granit 2 Petah Tikva","status":"Booked","rate":"450","currency":"USD","billed":true,"paid":false,"comments":"משלחת תורמים גדולים מאוסטרליה\n\nכ 50 משתתפים\n\n20.04.26","workflow":"","media":[]},{"id":"mm22ydcktisl","org":"AJC","contact":"Victoria Polak","email":"polakv@ajc.org","phone":"0547452204","group":"Latino political leaders from USA","date":"2026-03-23","time":"10:00-12:00","company":"","presenter":"Gilad Carni","address":"","status":"Cancelled","rate":"500","currency":"USD","billed":false,"paid":false,"comments":"Monday, March 23, 2026\n\n10:00am-12:00pm\nThe Start-up Nation: Behind the Scenes - Rothschild boulevard walking tour with Gilad Carni, serial entrepreneur, founder and CEO of UAE-Israel Innovation Office\n\n12:00pm-1:00pm\nGroup lunch at Asif restaurant at Start Up Nation Central","workflow":"cancelled due to war","media":[]},{"contact":"Carina Auerbach-Hod","org":"Keren Hayesod","email":"Carina@khuia.org","phone":"0545509725","group":"40 Donors from Sao Paulo Brazil","date":"2026-05-05","time":"11:00-12:30","company":"","presenter":"","address":"","status":"Booked","rate":"450","currency":"USD","billed":false,"paid":false,"comments":"משלחת חשובה מסאו פאולו במסגרת אסיפה 2026 - הבכירים של הפדרציה של הקהילה היהודית במדינת סאו פאולו, ברזיל.\n\nהם מבקרים בארץ מידי שנה ופוגשים פוליטיקאים, שרי ממשלה, אנשי חברה.\n\nרוצים לבקר ב Startup Nation Central ופגישה עם המנכ\"ל.\n\nיום שלישי, 5 למאי, 2026, בשעה 11:00","media":[],"id":"mm22ydckicop"},{"contact":"Tali Azulay","org":"Keren Hayesod","email":"Tali@khuia.org","phone":"0526048400","group":"20 people from Chile visit TEVEL","date":"2026-04-23","time":"15:00-16:30","company":"Tevel","presenter":"","address":"Agridera Farm, Tel Nof, Gedera, Israel","status":"Booked","rate":"450","currency":"USD","billed":false,"paid":false,"comments":"משלחת של כ 20 משתתפים ממגבית צ'ילה.\n\nApril 23rd 15:00-16:30\nAddress: Agridera Farm, Tel Nof, Gedera, Israel\nContact person: Dikla +972.50.5927000","media":[],"id":"mm22ydckcl03"},{"id":"mm22ydckqcub","org":"Amiel Tours","contact":"Zehava Goldenberg-Chayat","email":"ZehavaGC@amiel.com","phone":"050-623-2179","group":"22 people from Argentina 1 of 2","date":"2026-04-20","time":"10:30-11:30","company":"Quantum Transistors","presenter":"","address":"","status":"Booked","rate":"500","currency":"USD","billed":false,"paid":false,"comments":"המשלחת מבוינס איירס, גילאים 50 פלוס, אנשי עסקים ופעילים במגבית, משלחת ארגנטינה של קרן היסוד ליום העצמאות.\n  \n\nהמשלחת תמנה כ-22 איש ואני מאתגרת אותך, הם רוצים עוד חברת הייטיק אולי של של סייבר  \n\nוהלוז באותו יום יהיה\n\n \n\nMonday 20 April (Eve of Eve of Memorial Day)\n\n07:00-08:00      Breakfast at hotel\n\n08:00                    Depart hotel.\n\n08:30-09:30      Visit Wing project at Biet Brodetzki- Tel Aviv (Ramat Aviv)\n\n10:30-11:30      Visit High tech company-Quantum Transistors at Binyamina TBC\n\n12:00-13:30      Lunch at Tishbi Winery with wine testing\n\n14:30-15:30      Visit High-Tech/Start Up company at Tel Aviv\n\n16:00                    Return to hotel\n\n18:00                    Depart hotel.\n\n19:00-22:00       Yom Hazikaron ceremony in Latrun with Masa project participants,.\nכ-25 איש מעוניינים לבקר בחברת סטרט אפ בתל אביב.\n\nיום שני 20 אפריל בשעה 13:00-15:00.","workflow":"5/3 sent whatsapp to Miriam","media":[]},{"contact":"Carina Auerbach-Hod","org":"Keren Hayesod","email":"Carina@khuia.org","phone":"054-550-9725","group":"80 people from Mexico","date":"2026-04-23","time":"15:00-17:00","company":"","presenter":"","address":"","status":"Booked","rate":"900","currency":"USD","billed":false,"paid":false,"comments":"","media":[],"id":"mm22ydck9j4p"},{"id":"mm3hktlpxul7","org":"iTrek","contact":"Michal Alperson","email":"Michal.alperson@itrek.org","phone":"052-604-8149","group":"30 iTrek Board Members","date":"2026-05-04","time":"10:00-12:30","company":"","presenter":"","address":"","status":"Tentative","rate":"900","currency":"USD","billed":false,"paid":false,"comments":"[13:18, 2/26/2026] Michal Alperson מיכל Itrek: אשמח לקבל ממך הצעה לסיור בתל אביב \n4 במאי יום שני בבוקר\nשדרות רוטשילד וביקור/ מפגש עם כמה חברות בשדרה.\n\nדברים מעניינים, פגישה עם פאונדרים או דברים ממש מיוחדים שאתה יכול להציע.\n\nקבוצה שלנו, של אייטרק\nחברי בורד\nתומכים ותורמים פוטנציאלים שלנו \nאנשים חשובים לנו מאד! \nחלקם אנשי עסקים שהנושא מאד מעניין אותם. \n\nנאמר שעתיים, שעתיים וחצי סיור? \nהמפגשים קצרים וממוקדים","workflow":"","media":[]},{"id":"mmd9yrntz064","org":"Amiel Tours","contact":"Zehava Goldenberg-Chayat","email":"ZehavaGC@amiel.com","phone":"050-623-2179","group":"משלחת ארגנטינה- קרן היסוד 2 מ2","date":"2026-04-20","time":"14:30-15:30","company":"CheckPoint","presenter":"Jeremy","address":"תל אביב","status":"In Progress","rate":"500","currency":"USD","billed":false,"paid":false,"comments":"שלום גלעד.\n\nבתקווה לימים טובים, בינתיים קיבלנו תשובה שיש אישור לחברה שהצעת  \n\nהמשלחת תמנה כ-22 איש ואני מאתגרת אותך, הם רוצים עוד חברת הייטיק אולי של של סייבר  \n\nוהלוז באותו יום יהיה\n\n \n\nMonday 20 April (Eve of Eve of Memorial Day)\n\n07:00-08:00      Breakfast at hotel\n\n08:00                    Depart hotel.\n\n08:30-09:30      Visit Wing project at Biet Brodetzki- Tel Aviv (Ramat Aviv)\n\n10:30-11:30      Visit High tech company-Quantum Transistors at Binyamina TBC\n\n12:00-13:30      Lunch at Tishbi Winery with wine testing\n\n14:30-15:30      Visit High-Tech/Start Up company at Tel Aviv\n\n16:00                    Return to hotel\n\n18:00                    Depart hotel.\n\n19:00-22:00       Yom Hazikaron ceremony in Latrun with Masa project participants,.\nastelia security or cyber security company\n \n\n \n\nאשמח לתשובתך באם אפשרי או שנשנה בהתאם את הלוז,","workflow":"5/3/26 asked Jeremy from Checkpoint after I confirmed with Zehava","media":[]}],"speaking":[{"contact":"Tal Sternau","org":"Peres Center","email":"bookings@peres-center.org","phone":"052-2413003","event":"Peres Center- HiperGlobal","type":"Speaker","topic":"ישראל כמעצמת סטארט-אפ – איך נכשלתי לאחר 3 אקזיטים","date":"2026-03-24","time":"15:15-16:00","location":"Peres Center","status":"Confirmed","rate":"1000","currency":"NIS","billed":false,"paid":false,"notes":"שם קבוצה: מנכ\"לים בכירים מהחברה הייפר גלובל\n\nאיש קשר: ג'נט פינקל\nטלפון: 0502216888\nמס' משתתפים: 10\nשפת הרצאה: אנגלית\nפרופיל: 10 מנכ\"לים מרחבי העולם של החברה הייפר גלובל","media":[],"id":"mm22ydckbbpk"}],"companies":[{"id":"mm22ydckq9nn","name":"Exodigo","category":"Technology","location":"תל אביב","address":"המסגר 39 תל אביב","contact":"","phone":"054-6430035","email":"","website":"","notes":"Underground infrastructure mapping","region":"Central"},{"id":"mm22ydclrfe2","name":"GONG AI","category":"Technology","location":"רמת גן","address":"רמת גן","contact":"מיכל שרייבר","phone":"050-4245533","email":"","website":"gong.io","notes":"AI sales intelligence platform","region":"Central"},{"id":"mm22ydcl0q3s","name":"Discount Bank Innovation","category":"Finance","location":"תל אביב","address":"מנחם בגין 52, תל אביב","contact":"Efrat Cohen Basat","phone":"052-6592489","email":"eilat.cohenbasat@dbank.co.il","website":"","notes":"Innovation center. Via Yaron at 8200 event.","region":"Central"},{"id":"mm22ydcl8oob","name":"BEE HERO","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"איתן שוורץ","phone":"","email":"","website":"beehero.io","notes":"Bee-hive monitoring technology. Recommended via Eshet Tours.","region":"Central"},{"id":"mm22ydcl0fn9","name":"WIX","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"רותם","phone":"","email":"","website":"wix.com","notes":"","region":"Central"},{"id":"mm22ydcls207","name":"Azrieli Innovation Center","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"Inbal","phone":"","email":"Inbale@azrieli.com","website":"","notes":"Met at OurCrowd train event","region":"Central"},{"id":"mm22ydclo6vj","name":"Capsulab","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"Omer Agura","phone":"052-5126644","email":"","website":"capsulab.com","notes":"Wants to host delegations","region":"Central"},{"id":"mm22ydclrkau","name":"Mindspace","category":"Venue","location":"תל אביב","address":"תל אביב","contact":"Rachel","phone":"","email":"","website":"mindspace.me","notes":"Coworking / event venue","region":"Central"},{"id":"mm22ydcly3ld","name":"Team 8","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"","phone":"","email":"","website":"team8.vc","notes":"Cybersecurity venture group","region":"Central"},{"id":"mm22ydclq8vn","name":"AutoDesk Israel","category":"Technology","location":"תל אביב","address":"רוטשילד 22, תל אביב","contact":"","phone":"","email":"","website":"autodesk.com","notes":"","region":"Central"},{"id":"mm22ydcl54qq","name":"8200 Impact","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"Leehe Friedman","phone":"052-3634368","email":"Leehef@8200.org.il","website":"","notes":"Met at AJC Miami / Carlton. Will take delegations.","region":"Central"},{"id":"mm22ydclpiwd","name":"Fiverr","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"Adi Broza","phone":"","email":"","website":"fiverr.com","notes":"","region":"Central"},{"id":"mm22ydclkqqo","name":"AWS Israel","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"","phone":"","email":"","website":"aws.amazon.com","notes":"","region":"Central"},{"id":"mm22ydclkyln","name":"Monday.com","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"","phone":"","email":"","website":"monday.com","notes":"","region":"Central"},{"id":"mm22ydcl2r3m","name":"Elementor","category":"Technology","location":"תל אביב","address":"תל אביב","contact":"Itamar Ronen","phone":"","email":"","website":"elementor.com","notes":"","region":"Central"},{"id":"mm22ydcl1v4e","name":"CheckPoint","category":"Security","location":"תל אביב","address":"תל אביב","contact":"Daphne","phone":"","email":"","website":"checkpoint.com","notes":"Cybersecurity giant","region":"Central"},{"id":"mm22ydclyqmd","name":"Quantum Hub","category":"Technology","location":"הרצליה","address":"הרצליה","contact":"Liron Ben Zaken","phone":"052-5400811","email":"","website":"quantum-hub.com","notes":"Large accelerator, wants to host delegations","region":"Central"},{"id":"mm22ydclkoa5","name":"WaterGen","category":"Technology","location":"פתח תקווה","address":"גרניט 2, פתח תקווה (קומה 3)","contact":"Anna Chernyavsky (VP Marketing)","phone":"","email":"","website":"watergen.com","notes":"Atmospheric water generation. Contact: MICKY. Great delegation host.","region":"Central"},{"id":"mm22ydcl82w8","name":"Vertical Fields","category":"Agriculture","location":"פתח תקווה","address":"פתח תקווה (ליד WaterGen)","contact":"","phone":"","email":"","website":"","notes":"Vertical farming. Adjacent to WaterGen — can combine visits.","region":"Central"},{"id":"mm22ydcl78ti","name":"Penera.io","category":"Technology","location":"פתח תקווה","address":"פתח תקווה (ליד WaterGen)","contact":"Dganit Roth Feller","phone":"052-8513703","email":"","website":"penera.io","notes":"Next to WaterGen, easy to combine","region":"Central"},{"id":"mm22ydclb4oq","name":"IBM Israel","category":"Technology","location":"פתח תקווה","address":"פתח תקווה","contact":"ירון (met at Alpha Zone / Bima)","phone":"","email":"Gilma@il.IBM.com","website":"ibm.com","notes":"","region":"Central"},{"id":"mm22ydcl2mpo","name":"Unlimited Robotics","category":"Technology","location":"פתח תקווה","address":"פתח תקווה","contact":"","phone":"","email":"","website":"unlimited-robotics.com","notes":"","region":"Central"},{"id":"mm22ydcl7dyj","name":"Kinneret Innovation Center (KIC)","category":"Technology","location":"כנרת","address":"כנרת, שפת הכינרת","contact":"הילה ברקן (via עדי)","phone":"","email":"","website":"","notes":"Agro-tech, water & climate. Near Jordan triangle. Turned north Israel into hi-tech hub.","region":"North"},{"id":"mm22ydcl6tu5","name":"Jessica Startup (Defense & Energy AI)","category":"Security","location":"קיבוץ שלוחות","address":"קיבוץ שלוחות, עמק המעיינות","contact":"אביטל (מנכ\"ל דלקל)","phone":"052-3990574","email":"","website":"","notes":"Defense & energy AI startup. Can combine with agro-solar tour + school of industry. Can arrange meeting with council head.","region":"North"},{"id":"mm22ydclilzv","name":"HaBaita Chozrim LaGalil","category":"Other","location":"גליל","address":"גליל","contact":"תום להד","phone":"052-4588282","email":"","website":"","notes":"Initiative by retired general to bring people back to the Galil","region":"North"},{"id":"mm22ydcl6b9y","name":"Open Valley — Tel Chai","category":"Technology","location":"תל חי","address":"תל חי","contact":"תום להט","phone":"","email":"","website":"","notes":"Tech hub + border security tour to Kfar Giladi. Great full-day northern itinerary.","region":"North"},{"id":"mm22ydclxagk","name":"Keren Mandel North","category":"Other","location":"קריית טבעון","address":"קריית טבעון","contact":"קרן שביט","phone":"","email":"","website":"mandelfoundation.org.il","notes":"Mandel Foundation regional director — North","region":""},{"id":"mm22ydcly8fi","name":"Maté Asher (Border Tour)","category":"Tour","location":"מטה אשר (נהריה)","address":"מטה אשר","contact":"תומר גלעד","phone":"","email":"","website":"","notes":"Border security tour. Also: Nissan Zaavi / Kfar Giladi.","region":""},{"id":"mm22ydclwbpb","name":"Carmel Software — Charedi Women","category":"Technology","location":"כרמיאל","address":"כרמיאל","contact":"שמעון","phone":"052-5610155","email":"","website":"","notes":"Software co. employing Charedi women for 16 years. CEO: former kibbutznik turned Charedi. AI projects. Small but incredible Zionist story.","region":"North"},{"id":"mm22ydclwbmw","name":"Quantum Chip (Binyamina)","category":"Technology","location":"בנימינה","address":"בנימינה (ליד הרכבת)","contact":"מרים שטילמן לבזובסקי","phone":"","email":"","website":"","notes":"Develops quantum chip at room temperature. Has FAB — one of 3 in the world.","region":"Central"},{"id":"mm22ydclnrw4","name":"Metal 3D Printing (Ravadim)","category":"Technology","location":"אשדוד - אזור רבדים","address":"אזור תעשייה רבדים, ליד אשדוד","contact":"מרים שטילמן לבזובסקי","phone":"","email":"","website":"","notes":"Fast 3D printing of giant metal parts. Clients: US DoD, Mercedes. Industry 4.0 frontier.","region":"South"},{"id":"mm22ydclqwqa","name":"Israel Patent Authority","category":"Other","location":"ירושלים","address":"גן הטכנולוגי מלחה, ירושלים","contact":"מיכל","phone":"","email":"","website":"ilpo.gov.il","notes":"IP, patents, trademarks. Represents Israel at WIPO. Interested in hosting delegations.","region":"Jerusalem"},{"id":"mm22ydclwl3q","name":"Israel Aerospace Industries (IAI)","category":"Security","location":"","address":"","contact":"","phone":"","email":"","website":"iai.co.il","notes":"Contact in WhatsApp","region":""},{"id":"mm22ydcluwi1","name":"Shifters AI Robotics","category":"Security","location":"יבנה","address":"יבנה","contact":"Assaf","phone":"","email":"assaf@shiftersai.com","website":"shiftersai.com","notes":"AI-based legged robotic systems for defense. Adjacent to Chapark — can combine.","region":"North"},{"id":"mm22ydcl38nt","name":"Chapark Technologies","category":"Security","location":"יבנה","address":"יבנה","contact":"","phone":"","email":"","website":"","notes":"CNC parts for defense (Elbit, IAI, DoD). Next to Shifters AI.","region":"North"},{"id":"mm22ydcl3fi3","name":"Rafael/Elbit Connection","category":"Security","location":"","address":"","contact":"נימרוד","phone":"054-2363345","email":"","website":"","notes":"Via Shachar Torin / Start Up Grind. Can arrange Rafael/Elbit visits.","region":""},{"id":"mm22ydcla67a","name":"Defense Ministry Contact","category":"Security","location":"","address":"","contact":"שרה","phone":"050-8779130","email":"","website":"","notes":"Can help with Rafael, IAI, any factory — called proactively","region":""},{"id":"mm22ydclfomj","name":"Omer Dror","category":"Speaker","location":"","address":"","contact":"Omer Dror","phone":"052-8537692","email":"omer.the.dror@gmail.com","website":"","notes":"Ness Technologies. Israeli-Palestinian initiative. Heard at Papaya Global.","region":""},{"id":"mm22ydclzmvy","name":"Gev Ben Haim","category":"Speaker","location":"","address":"","contact":"Gev Ben Haim","phone":"052-3525746","email":"","website":"stops.com","notes":"","region":""},{"id":"mm22ydclq0d0","name":"Limor Shofman","category":"Speaker","location":"","address":"","contact":"Limor Shofman","phone":"","email":"","website":"","notes":"Via Adi. Has company for speakers.","region":""},{"id":"mm22ydclka07","name":"Chedva","category":"Speaker","location":"","address":"","contact":"Chedva","phone":"","email":"","website":"linkedin.com/in/chedva/","notes":"Religious speaker. Met at AJC Miami event.","region":""},{"id":"mm22ydclyl7x","name":"Shir Keren — Agrint","category":"Speaker","location":"","address":"","contact":"Shir Keren","phone":"054-8085138","email":"","website":"agrint.net","notes":"AgriTech speaker","region":""},{"id":"mm22ydclep4k","name":"Gidi Kadosh — Impact","category":"Speaker","location":"","address":"","contact":"Gidi Kadosh","phone":"052-4777717","email":"","website":"","notes":"Impact Entrepreneur speaker","region":""},{"id":"mm22ydclzzwn","name":"Sharon Barak — Soltum","category":"Speaker","location":"","address":"","contact":"Sharon Barak","phone":"","email":"","website":"soltum.com","notes":"","region":""},{"id":"mm22ydcljg84","name":"Alon — Ensights.ai","category":"Speaker","location":"","address":"","contact":"Alon","phone":"","email":"","website":"ensights.ai","notes":"AI analytics presenter","region":""},{"id":"mm22ydcl720y","name":"Shalom — Mash Foods","category":"Speaker","location":"","address":"","contact":"Shalom","phone":"","email":"","website":"mashfoods.com","notes":"FoodTech speaker","region":""},{"id":"mm22ydcl7a5n","name":"Instituto Cervantes TLV","category":"Venue","location":"תל אביב","address":"רחוב הארבעה, תל אביב","contact":"Einat","phone":"03-5279992","email":"culttel@cervantes.es","website":"","notes":"Used for Foreign Ministry (Madrid women). Good event space.","region":"Central"},{"id":"mm22ydcl5m2p","name":"HaMakom (Balfour)","category":"Venue","location":"תל אביב","address":"בלפור, תל אביב","contact":"חיים","phone":"052-5552511","email":"","website":"","notes":"Maccabi events held there","region":"Central"},{"id":"mm22ydcl2wg6","name":"Peres Center for Peace","category":"Venue","location":"תל אביב","address":"תל אביב","contact":"","phone":"","email":"","website":"peres-center.org","notes":"Prestigious venue","region":"Central"},{"id":"mm22ydcl6er1","name":"Rothschild 57","category":"Venue","location":"תל אביב","address":"רוטשילד 57, תל אביב","contact":"","phone":"","email":"","website":"","notes":"Event space","region":"Central"},{"id":"mm22ydcll5re","name":"The Rise","category":"Venue","location":"תל אביב","address":"תל אביב","contact":"","phone":"","email":"","website":"","notes":"Coworking / event space","region":"Central"},{"id":"mm22ydclgfbj","name":"WeWork Israel","category":"Venue","location":"תל אביב","address":"תל אביב","contact":"","phone":"","email":"","website":"wework.com","notes":"","region":"Central"},{"id":"mm22ydcllbch","name":"TASE (Stock Exchange)","category":"Venue","location":"תל אביב","address":"תל אביב","contact":"","phone":"","email":"","website":"tase.co.il","notes":"Auditorium: 850 NIS+VAT/hr. Conference room: 8,600 NIS+VAT / 4 hrs.","region":"Central"},{"id":"mm22ydcld8s1","name":"Weizmann Institute","category":"Venue","location":"רחובות","address":"רחובות","contact":"","phone":"","email":"","website":"weizmann.ac.il","notes":"25 NIS per person entry","region":"Central"},{"id":"mm22ydclp84n","name":"SodaStream","category":"Venue","location":"","address":"","contact":"","phone":"","email":"","website":"sodastream.com","notes":"60 NIS per person including food","region":""},{"id":"mm22ydcl95t2","name":"Playtika HQ","category":"Venue","location":"הרצליה","address":"הרצליה","contact":"","phone":"","email":"","website":"playtika.com","notes":"Can host events","region":"Central"},{"id":"mm22ydcls41u","name":"Airev (Flying Vehicle)","category":"Technology","location":"פרדס חנה","address":"פרדס חנה","contact":"Asia","phone":"054-9090883","email":"Asia@airev.aero","website":"airev.aero","notes":"Flying vehicle / eVTOL. Amazing! Met at OurCrowd.","region":""},{"id":"mm22ydcl2ksq","name":"WiCharge","category":"Technology","location":"רחובות","address":"רחובות","contact":"via ירון ויקטור","phone":"054-3090161","email":"","website":"wicharge.com","notes":"Wireless charging over-the-air technology","region":"Central"},{"id":"mm22ydcl1gvz","name":"TransAlgae","category":"Agriculture","location":"רחובות","address":"רחובות","contact":"עופרה","phone":"050-6516275","email":"","website":"transalgae.com","notes":"Algae biotech. Cannot host large groups. Interested in international delegations.","region":"Central"},{"id":"mm22ydclrw0e","name":"Sufresca","category":"Agriculture","location":"נס ציונה - פארק המדע","address":"פארק המדע, נס ציונה","contact":"אפרת פרי (מנכ\"ל)","phone":"","email":"","website":"sufresca.com","notes":"Natural coating to extend fruit shelf life. Mexico is main market — perfect for Mexican delegations.","region":""},{"id":"mm22ydclv5r9","name":"Netafim & Kibutz Magal","category":"Agriculture","location":"קיבוץ מגל","address":"קיבוץ מגל","contact":"","phone":"","email":"","website":"netafim.com","notes":"Drip irrigation pioneer. Have price sheet for tours.","region":"North"},{"id":"mm22ydcl9qgu","name":"Hackaveret — JDC","category":"Technology","location":"לוד","address":"לוד","contact":"","phone":"","email":"avitalef@jdc.org","website":"","notes":"Entrepreneurship center, Lod","region":"Central"},{"id":"mm22ydcl8rqg","name":"Airovation","category":"Technology","location":"רחובות","address":"רחובות","contact":"via Haggai Gat","phone":"","email":"","website":"","notes":"","region":"Central"},{"id":"mm22ydcllyoo","name":"Hilma Tech","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"Merav","phone":"972-52-8228686","email":"","website":"hilma.tech","notes":"Tech training for Charedi women. Hosted UCSD group.","region":"Jerusalem"},{"id":"mm22ydclh4ms","name":"Brainsway","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"Reut","phone":"054-6259466","email":"","website":"brainsway.com","notes":"Deep TMS brain stimulation for depression/OCD","region":"Jerusalem"},{"id":"mm22ydclo39w","name":"SixDOF Space","category":"Space","location":"ירושלים","address":"תלפיות, ירושלים","contact":"Mark","phone":"","email":"mark@sixdof.space","website":"sixdof.space","notes":"Space tech startup. Booked for Brazilian group Aug 2022.","region":"Jerusalem"},{"id":"mm22ydclucx1","name":"MassChallenge Israel","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"Shai Shalom","phone":"","email":"","website":"masschallenge.org","notes":"Startup accelerator","region":"Jerusalem"},{"id":"mm22ydcl47gu","name":"JNext — Jerusalem DA","category":"Other","location":"ירושלים","address":"ירושלים","contact":"","phone":"","email":"","website":"jda.gov.il","notes":"Gov agency promoting Jerusalem tech ecosystem. Also: biojerusalem.co.il","region":"Jerusalem"},{"id":"mm22ydclxubs","name":"Lightricks","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"Neta Geva","phone":"","email":"","website":"lightricks.com","notes":"Facetune, Photoleap — consumer AI apps","region":"Jerusalem"},{"id":"mm22ydclw5d5","name":"Freightos","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"","phone":"","email":"","website":"freightos.com","notes":"Digital freight marketplace","region":"Jerusalem"},{"id":"mm22ydcl7epd","name":"Brain Q","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"","phone":"","email":"","website":"brainq.co.il","notes":"Brain-computer interface for stroke rehabilitation","region":"Jerusalem"},{"id":"mm22ydclriik","name":"Fleur Hassan Nahoum","category":"Speaker","location":"ירושלים","address":"ירושלים","contact":"Fleur Hassan Nahoum","phone":"","email":"","website":"","notes":"Deputy Mayor of Jerusalem. Speaks on startups. Via Yaron.","region":"Jerusalem"},{"id":"mm22ydcliln6","name":"OurCrowd","category":"Finance","location":"ירושלים","address":"ירושלים","contact":"","phone":"","email":"","website":"ourcrowd.com","notes":"Equity crowdfunding platform / VC","region":"Jerusalem"},{"id":"mm22ydclceri","name":"Mobileye","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"","phone":"","email":"","website":"mobileye.com","notes":"Autonomous driving (Intel). Iconic Jerusalem tech story.","region":"Jerusalem"},{"id":"mm22ydcl7o2x","name":"OrCam","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"","phone":"","email":"","website":"orcam.com","notes":"Assistive AI for visually impaired","region":"Jerusalem"},{"id":"mm22ydcl6sya","name":"Clearvuze","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"Janine Kutliroff (via Yaron)","phone":"","email":"janine@clearvuze.com","website":"","notes":"","region":"Jerusalem"},{"id":"mm22ydcl1d79","name":"InZiv","category":"Technology","location":"ירושלים","address":"ירושלים","contact":"via Yaron","phone":"","email":"","website":"","notes":"","region":"Jerusalem"},{"id":"mm22ydcl1w7z","name":"Glilot VC","category":"Finance","location":"הרצליה","address":"הרצליה","contact":"Dorin","phone":"058-4310359","email":"","website":"glilot.com","notes":"Cybersecurity VC. Met via Yaron at Pepsi event. Happy to host.","region":"Central"},{"id":"mm22ydcl90cl","name":"SpaceIL","category":"Space","location":"הרצליה","address":"הרצליה","contact":"","phone":"","email":"","website":"spaceil.com","notes":"Beresheet lunar mission nonprofit","region":"Central"},{"id":"mm22ydclbr28","name":"Pitango VC","category":"Finance","location":"","address":"","contact":"Idit Mualem","phone":"","email":"","website":"pitango.com","notes":"Leading Israeli VC","region":""},{"id":"mm22ydcliwk6","name":"BAZAN Group Innovation","category":"Technology","location":"חיפה","address":"חיפה","contact":"Einat Klein (Head of Innovation)","phone":"050-2174880","email":"keinat@bazan.co.il","website":"bazan.co.il","notes":"Met at Alpha Zone event","region":"North"},{"id":"mm22ydclo3ak","name":"מטי חיפה","category":"Technology","location":"חיפה","address":"חיפה","contact":"ערן אלפונטה (מנכ\"ל)","phone":"054-7299848","email":"","website":"mati.org.il","notes":"Via Meni Genosar","region":"North"},{"id":"mm22ydclolez","name":"Keren Hayesod (Berlin)","category":"Client","location":"גרמניה","address":"ברלין","contact":"Rafi Heumann","phone":"+49-160-3209880","email":"rafih@keren-hayesod.de","website":"kh-uia.org","notes":"Key client — Berlin rep","region":"International"},{"id":"mm22ydcls8q7","name":"Keren Hayesod (Paris)","category":"Client","location":"צרפת","address":"פריז","contact":"Michael Sfez","phone":"06-84907214","email":"michael.sfez@kh-aui.fr","website":"","notes":"Key client — Paris rep","region":"International"},{"id":"mm22ydcl8kfa","name":"Eshet Incoming Tours","category":"Client","location":"ישראל","address":"","contact":"Tamar Lurye / Amon Ben David","phone":"054-4404017","email":"tamar.lurye@eshetincoming.com","website":"eshetincoming.com","notes":"Competitor/collaborator. Amon (CEO): amon@eshetincoming.com. Holland: Richard.Reitsma@eshetincoming.com","region":""},{"id":"mm22ydclcn0x","name":"Maccabi World Union","category":"Client","location":"ישראל","address":"","contact":"Ginette Laufer / Analia / Luis / Nitzan","phone":"","email":"analia@maccabi.org","website":"maccabi.org","notes":"Multiple contacts: ginette@, analia@, luis@, nitzan@, andres@, Brian@ all @maccabi.org","region":""},{"id":"mm22ydcl0izd","name":"Diesenhaus","category":"Client","location":"ישראל","address":"","contact":"Mickey / Adva Kesher","phone":"03-6230043","email":"advake@diesenhaus.com","website":"","notes":"3000 Christian youth group (via Rachel KH). Adva: 052-3955950","region":""},{"id":"mm22ydclpfqy","name":"Amiel Institute","category":"Client","location":"ישראל","address":"","contact":"Anat Dahan / Sharon","phone":"972-3-5388482","email":"AnatD@amiel.israel.net","website":"amiel.israel.net","notes":"Multiple contacts: SharonA@, Debbi@, Shani@, JosephC@ @amiel.israel.net. Met at Lexus offices.","region":""},{"id":"mm22ydclq2v8","name":"Israel Seminar","category":"Client","location":"ישראל","address":"מייז סטריט","contact":"Ilana / Adina","phone":"052-6363026","email":"adina@israelseminar.com","website":"israelseminar.com","notes":"Director of Content: Adina. Nice offices, VIP travel, AIPAC.","region":""},{"id":"mm22ydclr5rb","name":"Authentic Israel","category":"Client","location":"אור יהודה","address":"אור יהודה","contact":"Rachel","phone":"054-3353800","email":"rachelf@authenticisrael.com","website":"authenticisrael.com","notes":"Also: roi@authenticisrael.com","region":""},{"id":"mm22ydclz1hu","name":"Passages Israel","category":"Client","location":"אבן יהודה","address":"אבן יהודה","contact":"Rivka","phone":"050-6207496","email":"rivka@passagesisrael.org","website":"passagesisrael.org","notes":"Christian & VIP tours to Israel","region":""},{"id":"mm22ydclbc82","name":"Destination Israel","category":"Client","location":"ישראל","address":"","contact":"Eyal (via Hillel Kain)","phone":"","email":"eyal@destinationisrael.com","website":"destinationisrael.com","notes":"Also: moselle@destinationisrael.com","region":""},{"id":"mm22ydclgmsw","name":"Mision Impacto Israel","category":"Client","location":"","address":"","contact":"Ariel (Maccabi Argentina)","phone":"","email":"arielk@faccma.org","website":"misionimpactoisrael.com","notes":"Latin American missions specialist","region":""},{"id":"mm22ydclmcuz","name":"YPO Israel","category":"Client","location":"ישראל","address":"","contact":"Keren","phone":"054-6955503","email":"","website":"ypo.org","notes":"Via Lisa Freedman (lisa.fridman@yahoo.com). KH German/French business group.","region":""},{"id":"mmd8htxo6qns","name":"Quantum Transistors","category":"Technology","location":"Binyamina 0 next to rail station","region":"Central","address":"","contact":"Miriam Shtilman","phone":"0523820777","email":"","website":"","notes":"via Maoz she works in VC"},{"id":"mmdgokt44v93","name":"CheckPoint","category":"Security","location":"Tel Aviv","region":"Central","address":"","contact":"Jeremy Kaye","phone":"0547806484","email":"jeremyk@checkpoint.com","website":"","notes":"via Daphne. In charge of tours, delegations"}]};
+
+// ─── INIT ─────────────────────────────────────────────────
+async function init() {
+  setSbStatus('loading', 'Connecting…');
+  try {
+    await loadAll();
+    // If Supabase returned empty data, seed with backup
+    if (bookings.length === 0 && speaking.length === 0 && companies.length === 0) {
+      bookings  = SEED_DATA.bookings  || [];
+      speaking  = SEED_DATA.speaking  || [];
+      companies = SEED_DATA.companies || [];
+      // Push seed data up to Supabase so it persists
+      await saveToSupabase().catch(()=>{});
+      toast('Your backup data has been restored! ✨');
+    }
+    setSbStatus('ok', 'Supabase connected');
+    supabaseOk = true;
+  } catch(e) {
+    setSbStatus('err', 'Offline – local only');
+    loadFromLocalStorage();
+    // If localStorage also empty, seed it
+    if (bookings.length === 0 && speaking.length === 0 && companies.length === 0) {
+      bookings  = SEED_DATA.bookings  || [];
+      speaking  = SEED_DATA.speaking  || [];
+      companies = SEED_DATA.companies || [];
+      saveToLocalStorage();
+      toast('Backup data loaded (offline mode)');
+    }
+  }
+  renderAll();
+}
+
+async function loadAll() {
+  // Original app stores everything in one row in del_data
+  try {
+    const rows = await sbSelect('del_data');
+    if (rows && rows.length > 0) {
+      const row = rows[0];
+      window._delDataId = row.id;
+      bookings  = typeof row.bookings  === 'string' ? JSON.parse(row.bookings)  : (Array.isArray(row.bookings)  ? row.bookings  : []);
+      speaking  = typeof row.speaking  === 'string' ? JSON.parse(row.speaking)  : (Array.isArray(row.speaking)  ? row.speaking  : []);
+      companies = typeof row.companies === 'string' ? JSON.parse(row.companies) : (Array.isArray(row.companies) ? row.companies : []);
+      return;
+    }
+  } catch(e) {
+    console.log('Could not load del_data, trying individual tables:', e);
+  }
+  // Fallback to individual tables
+  [bookings, speaking, companies] = await Promise.all([
+    sbSelect('bookings').catch(() => []),
+    sbSelect('speaking').catch(() => []),
+    sbSelect('companies').catch(() => [])
+  ]);
+}
+
+// Save everything back to del_data (same format as original app)
+async function saveToSupabase() {
+  const payload = {
+    bookings:  JSON.stringify(bookings),
+    speaking:  JSON.stringify(speaking),
+    companies: JSON.stringify(companies),
+  };
+  if (window._delDataId) {
+    await sbUpdate('del_data', window._delDataId, payload);
+  } else {
+    const result = await sbInsert('del_data', payload);
+    const newRow = Array.isArray(result) ? result[0] : result;
+    window._delDataId = newRow?.id;
+  }
+}
+
+function loadFromLocalStorage() {
+  bookings  = JSON.parse(localStorage.getItem('dm_bookings')  || '[]');
+  speaking  = JSON.parse(localStorage.getItem('dm_speaking')  || '[]');
+  companies = JSON.parse(localStorage.getItem('dm_companies') || '[]');
+}
+
+function saveToLocalStorage() {
+  localStorage.setItem('dm_bookings',  JSON.stringify(bookings));
+  localStorage.setItem('dm_speaking',  JSON.stringify(speaking));
+  localStorage.setItem('dm_companies', JSON.stringify(companies));
+}
+
+// ─── SUPABASE STATUS ──────────────────────────────────────
+function setSbStatus(state, label) {
+  document.getElementById('sb-dot').className = `status-dot ${state}`;
+  document.getElementById('sb-label').textContent = label;
+}
+
+// ─── TOAST ────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast-msg ${type}`;
+  el.textContent = (type === 'success' ? '✅ ' : '❌ ') + msg;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ─── NAV ──────────────────────────────────────────────────
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id)?.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el?.classList.add('active');
+  renderAll();
+  if (window.innerWidth < 769) document.getElementById('sidebar').classList.remove('open');
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+function showCompanyCat(cat) {
+  showPage('companies', null);
+  document.getElementById('co-cat-filter').value = cat;
+  renderCompanies();
+}
+function showCompanyRegion(reg) {
+  showPage('companies', null);
+  document.getElementById('co-region-filter').value = reg;
+  renderCompanies();
+}
+
+// ─── RENDER ALL ───────────────────────────────────────────
+function renderAll() {
+  updateBadges();
+  updateStats();
+  renderDelBookings();
+  renderAllBookings();
+  renderSpeaking();
+  renderUpcoming();
+  renderAwaiting();
+  renderPaid();
+  renderCompanies();
+  renderDashboard();
+  populateFilters();
+}
+
+function updateBadges() {
+  const now = new Date();
+  document.getElementById('nb-all').textContent = bookings.length + speaking.length;
+  document.getElementById('nb-del').textContent = bookings.length;
+  document.getElementById('nb-speaking').textContent = speaking.length;
+  document.getElementById('nb-awaiting').textContent = [...bookings, ...speaking].filter(b => b.billed && !b.paid).length;
+  document.getElementById('nb-paid').textContent = [...bookings, ...speaking].filter(b => b.paid).length;
+  document.getElementById('nb-companies').textContent = companies.length;
+}
+
+function updateStats() {
+  const all = [...bookings, ...speaking];
+  const now = new Date();
+  document.getElementById('stat-total').textContent = all.length;
+  document.getElementById('stat-upcoming').textContent = all.filter(b => b.date && new Date(b.date) >= now).length;
+  document.getElementById('stat-paid').textContent = all.filter(b => b.paid).length;
+  document.getElementById('stat-awaiting').textContent = all.filter(b => b.billed && !b.paid).length;
+  document.getElementById('stat-speaking').textContent = speaking.length;
+  document.getElementById('stat-companies').textContent = companies.length;
+}
+
+function badgeClass(status) {
+  const m = { 'Booked':'booked','Confirmed':'confirmed','In Progress':'progress','Tentative':'tentative','Completed':'completed','Billed':'billed','Paid':'paid','Cancelled':'cancelled' };
+  return 'badge badge-' + (m[status] || 'tentative');
+}
+
+function fmtRate(b) {
+  if (!b.rate) return '—';
+  return `${b.currency || 'USD'} ${Number(b.rate).toLocaleString()}`;
+}
+
+function fmtDate(b) {
+  if (!b.date) return '—';
+  const d = new Date(b.date + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) + (b.time ? ' ' + b.time : '');
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────
+function renderDashboard() {
+  const all = [...bookings.map(b=>({...b,_type:'Delegation'})), ...speaking.map(s=>({...s,_type:'Speaking'}))];
+  const sorted = all.sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0,8);
+  const tbody = document.getElementById('dash-bookings-body');
+  tbody.innerHTML = sorted.length ? sorted.map(b => `<tr>
+    <td><span class="badge badge-${b._type==='Speaking'?'billed':'booked'}">${b._type}</span></td>
+    <td>${b.client||b.contact||'—'}</td>
+    <td>${fmtDate(b)}</td>
+    <td>${b.company_name||b.event_name||b.company_custom||'—'}</td>
+    <td><span class="${badgeClass(b.status)}">${b.status||'—'}</span></td>
+    <td>${fmtRate(b)}</td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="6">No bookings yet</td></tr>';
+
+  const payments = all.filter(b => b.billed && !b.paid).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const pbody = document.getElementById('dash-payments-body');
+  pbody.innerHTML = payments.length ? payments.map(b => `<tr>
+    <td>${b.client||b.contact||'—'}</td>
+    <td>${fmtDate(b)}</td>
+    <td>${b.company_name||b.event_name||b.company_custom||'—'}</td>
+    <td>${fmtRate(b)}</td>
+    <td><span class="${badgeClass(b.status)}">${b.status||'—'}</span></td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="5">No pending payments</td></tr>';
+}
+
+// ─── DELEGATION BOOKINGS ──────────────────────────────────
+function renderDelBookings() {
+  let data = [...bookings];
+  const sf = document.getElementById('del-status-filter')?.value;
+  const cf = document.getElementById('del-company-filter')?.value;
+  const clf = document.getElementById('del-client-filter')?.value;
+  const sort = document.getElementById('del-sort')?.value || 'asc';
+  if (sf) data = data.filter(b => b.status === sf);
+  if (cf) data = data.filter(b => (b.company_name||b.company_custom) === cf);
+  if (clf) data = data.filter(b => b.client === clf);
+  data.sort((a,b) => sort === 'asc' ? (a.date||'').localeCompare(b.date||'') : (b.date||'').localeCompare(a.date||''));
+  const tbody = document.getElementById('del-bookings-body');
+  tbody.innerHTML = data.length ? data.map(b => `<tr>
+    <td><div>${b.contact||'—'}</div><div style="font-size:11px;color:var(--text3)">${b.client||''}</div></td>
+    <td>${fmtDate(b)}</td>
+    <td>${b.company_name||b.company_custom||'—'}</td>
+    <td>${b.description||'—'}</td>
+    <td><span class="${badgeClass(b.status)}">${b.status||'—'}</span></td>
+    <td>${fmtRate(b)}</td>
+    <td>${b.billed ? '✅' : '—'}</td>
+    <td>${b.paid ? '✅' : '—'}</td>
+    <td><div class="action-btns">
+      <button class="icon-btn" onclick="editBooking('${b.id}')">✏️</button>
+      <button class="icon-btn delete" onclick="deleteBooking('${b.id}')">🗑</button>
+    </div></td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="9">No delegation bookings yet</td></tr>';
+}
+
+function clearDelFilters() {
+  ['del-status-filter','del-company-filter','del-client-filter'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('del-sort').value = 'asc';
+  renderDelBookings();
+}
+
+// ─── ALL BOOKINGS ─────────────────────────────────────────
+function renderAllBookings() {
+  const tf = document.getElementById('all-type-filter')?.value;
+  const sf = document.getElementById('all-status-filter')?.value;
+  const sort = document.getElementById('all-sort')?.value || 'asc';
+  let bk = bookings.map(b=>({...b,_type:'Delegation'}));
+  let sp = speaking.map(s=>({...s,_type:'Speaking'}));
+  let data = [...bk, ...sp];
+  if (tf === 'Delegation') data = bk;
+  else if (tf === 'Speaking') data = sp;
+  if (sf) data = data.filter(b => b.status === sf);
+  data.sort((a,b) => sort === 'asc' ? (a.date||'').localeCompare(b.date||'') : (b.date||'').localeCompare(a.date||''));
+  const tbody = document.getElementById('all-bookings-body');
+  tbody.innerHTML = data.length ? data.map(b => `<tr>
+    <td><span class="badge badge-${b._type==='Speaking'?'billed':'booked'}">${b._type}</span></td>
+    <td>${b.contact||b.client||'—'}</td>
+    <td>${fmtDate(b)}</td>
+    <td>${b.company_name||b.event_name||b.company_custom||'—'}</td>
+    <td><span class="${badgeClass(b.status)}">${b.status||'—'}</span></td>
+    <td>${fmtRate(b)}</td>
+    <td>${b.billed ? '✅' : '—'}</td>
+    <td>${b.paid ? '✅' : '—'}</td>
+    <td><div class="action-btns">
+      <button class="icon-btn" onclick="${b._type==='Speaking'?'editSpeaking':'editBooking'}('${b.id}')">✏️</button>
+      <button class="icon-btn delete" onclick="${b._type==='Speaking'?'deleteSpeaking':'deleteBooking'}('${b.id}')">🗑</button>
+    </div></td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="9">No bookings yet</td></tr>';
+}
+
+function clearAllFilters() {
+  ['all-type-filter','all-status-filter'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  renderAllBookings();
+}
+
+// ─── SPEAKING ─────────────────────────────────────────────
+function renderSpeaking() {
+  let data = [...speaking];
+  const tf = document.getElementById('sp-type-filter')?.value;
+  const sf = document.getElementById('sp-status-filter')?.value;
+  const sort = document.getElementById('sp-sort')?.value || 'desc';
+  if (tf) data = data.filter(s => s.type === tf);
+  if (sf) data = data.filter(s => s.status === sf);
+  data.sort((a,b) => sort === 'asc' ? (a.date||'').localeCompare(b.date||'') : (b.date||'').localeCompare(a.date||''));
+  const tbody = document.getElementById('speaking-body');
+  tbody.innerHTML = data.length ? data.map(s => `<tr>
+    <td><div>${s.contact||'—'}</div><div style="font-size:11px;color:var(--text3)">${s.client||''}</div></td>
+    <td>${s.event_name||'—'}${s.topic?`<div style="font-size:11px;color:var(--text3)">${s.topic}</div>`:''}</td>
+    <td>${s.type||'—'}</td>
+    <td>${fmtDate(s)}</td>
+    <td>${s.location||'—'}</td>
+    <td><span class="${badgeClass(s.status)}">${s.status||'—'}</span></td>
+    <td>${fmtRate(s)}</td>
+    <td>${s.billed ? '✅' : '—'}</td>
+    <td>${s.paid ? '✅' : '—'}</td>
+    <td><div class="action-btns">
+      <button class="icon-btn" onclick="editSpeaking('${s.id}')">✏️</button>
+      <button class="icon-btn delete" onclick="deleteSpeaking('${s.id}')">🗑</button>
+    </div></td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="10">No speaking engagements yet</td></tr>';
+}
+
+function clearSpFilters() {
+  ['sp-type-filter','sp-status-filter'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  renderSpeaking();
+}
+
+// ─── UPCOMING / AWAITING / PAID ───────────────────────────
+function renderUpcoming() {
+  const now = new Date();
+  const all = [...bookings.map(b=>({...b,_type:'Delegation'})), ...speaking.map(s=>({...s,_type:'Speaking'}))];
+  const data = all.filter(b => b.date && new Date(b.date+'T00:00:00') >= now).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const tbody = document.getElementById('upcoming-body');
+  tbody.innerHTML = data.length ? data.map(b => `<tr>
+    <td><span class="badge badge-${b._type==='Speaking'?'billed':'booked'}">${b._type}</span></td>
+    <td>${b.contact||b.client||'—'}</td><td>${fmtDate(b)}</td>
+    <td>${b.company_name||b.event_name||b.company_custom||'—'}</td>
+    <td><span class="${badgeClass(b.status)}">${b.status||'—'}</span></td>
+    <td>${fmtRate(b)}</td>
+    <td><div class="action-btns"><button class="icon-btn" onclick="${b._type==='Speaking'?'editSpeaking':'editBooking'}('${b.id}')">✏️</button></div></td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="7">No upcoming bookings</td></tr>';
+}
+
+function renderAwaiting() {
+  const all = [...bookings.map(b=>({...b,_type:'Delegation'})), ...speaking.map(s=>({...s,_type:'Speaking'}))];
+  const data = all.filter(b => b.billed && !b.paid).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const tbody = document.getElementById('awaiting-body');
+  tbody.innerHTML = data.length ? data.map(b => `<tr>
+    <td>${b.contact||b.client||'—'}</td><td>${fmtDate(b)}</td>
+    <td>${b.company_name||b.event_name||b.company_custom||'—'}</td>
+    <td>${fmtRate(b)}</td>
+    <td><span class="${badgeClass(b.status)}">${b.status||'—'}</span></td>
+    <td><div class="action-btns"><button class="icon-btn" onclick="${b._type==='Speaking'?'editSpeaking':'editBooking'}('${b.id}')">✏️</button></div></td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="6">No pending payments</td></tr>';
+}
+
+function renderPaid() {
+  const all = [...bookings.map(b=>({...b,_type:'Delegation'})), ...speaking.map(s=>({...s,_type:'Speaking'}))];
+  const data = all.filter(b => b.paid).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const tbody = document.getElementById('paid-body');
+  tbody.innerHTML = data.length ? data.map(b => `<tr>
+    <td>${b.contact||b.client||'—'}</td><td>${fmtDate(b)}</td>
+    <td>${b.company_name||b.event_name||b.company_custom||'—'}</td>
+    <td>${fmtRate(b)}</td>
+    <td><div class="action-btns"><button class="icon-btn" onclick="${b._type==='Speaking'?'editSpeaking':'editBooking'}('${b.id}')">✏️</button></div></td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="5">No paid bookings yet</td></tr>';
+}
+
+// ─── COMPANIES ────────────────────────────────────────────
+function renderCompanies() {
+  let data = [...companies];
+  const cat = document.getElementById('co-cat-filter')?.value;
+  const reg = document.getElementById('co-region-filter')?.value;
+  const city = document.getElementById('co-city-filter')?.value;
+  if (cat) data = data.filter(c => c.category === cat);
+  if (reg) data = data.filter(c => c.region === reg);
+  if (city) data = data.filter(c => c.city === city);
+
+  const container = document.getElementById('companies-container');
+  if (!data.length) { container.innerHTML = '<p style="padding:32px;text-align:center;color:var(--text3)">No companies yet</p>'; return; }
+
+  if (companyView === 'grid') {
+    container.innerHTML = `<div class="company-grid">${data.map(c => `
+      <div class="company-card">
+        <div class="company-name">${c.name}</div>
+        <div class="company-meta">
+          ${c.category ? `<span class="badge badge-tentative">${c.category}</span>` : ''}
+          ${c.region ? `<span>${c.region}</span>` : ''}
+          ${c.city ? `<span>📍 ${c.city}</span>` : ''}
+        </div>
+        ${c.contact ? `<div class="company-contact">👤 ${c.contact}</div>` : ''}
+        ${c.phone ? `<div class="company-contact">📞 ${c.phone}</div>` : ''}
+        ${c.email ? `<div class="company-contact">✉️ ${c.email}</div>` : ''}
+        <div class="action-btns" style="margin-top:10px;">
+          <button class="icon-btn" onclick="editCompany('${c.id}')">✏️</button>
+          <button class="icon-btn delete" onclick="deleteCompany('${c.id}')">🗑</button>
+        </div>
+      </div>`).join('')}</div>`;
+  } else {
+    container.innerHTML = `<table><thead><tr><th>Name</th><th>Category</th><th>Region</th><th>City</th><th>Contact</th><th>Phone</th><th>Email</th><th>Actions</th></tr></thead>
+    <tbody>${data.map(c => `<tr>
+      <td><strong>${c.name}</strong></td><td>${c.category||'—'}</td><td>${c.region||'—'}</td><td>${c.city||'—'}</td>
+      <td>${c.contact||'—'}</td><td>${c.phone||'—'}</td><td>${c.email||'—'}</td>
+      <td><div class="action-btns"><button class="icon-btn" onclick="editCompany('${c.id}')">✏️</button><button class="icon-btn delete" onclick="deleteCompany('${c.id}')">🗑</button></div></td>
+    </tr>`).join('')}</tbody></table>`;
+  }
+}
+
+function setCompanyView(v) {
+  companyView = v;
+  renderCompanies();
+}
+
+// ─── POPULATE FILTERS ─────────────────────────────────────
+function populateFilters() {
+  // Company filter in delegation bookings
+  const companyNames = [...new Set(bookings.map(b => b.company_name||b.company_custom).filter(Boolean))];
+  const sel = document.getElementById('del-company-filter');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All Companies</option>' + companyNames.map(n=>`<option${n===cur?' selected':''}>${n}</option>`).join('');
+  }
+  const clientNames = [...new Set(bookings.map(b => b.client).filter(Boolean))];
+  const csel = document.getElementById('del-client-filter');
+  if (csel) {
+    const cur = csel.value;
+    csel.innerHTML = '<option value="">All Clients</option>' + clientNames.map(n=>`<option${n===cur?' selected':''}>${n}</option>`).join('');
+  }
+  // Booking modal company select
+  const bkco = document.getElementById('bk-company-select');
+  if (bkco) {
+    bkco.innerHTML = '<option value="">Select from directory…</option>' + companies.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+  }
+  // City filter
+  const cities = [...new Set(companies.map(c=>c.city).filter(Boolean))];
+  const citysel = document.getElementById('co-city-filter');
+  if (citysel) {
+    const cur = citysel.value;
+    citysel.innerHTML = '<option value="">All Cities</option>' + cities.map(c=>`<option${c===cur?' selected':''}>${c}</option>`).join('');
+  }
+}
+
+// ─── MODALS ───────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function openBookingModal(id = null) {
+  editingBookingId = id;
+  const b = id ? bookings.find(x => x.id === id) : null;
+  document.getElementById('booking-modal-title').textContent = b ? 'Edit Booking' : 'New Booking';
+  document.getElementById('bk-id').value = id || '';
+  ['bk-client','bk-contact','bk-email','bk-phone','bk-desc','bk-date','bk-time','bk-company-custom','bk-presenter','bk-address','bk-comments','bk-workflow'].forEach(fid => {
+    const key = fid.replace('bk-','').replace(/-/g,'_');
+    const map = {'bk-client':'client','bk-contact':'contact','bk-email':'email','bk-phone':'phone','bk-desc':'description','bk-date':'date','bk-time':'time','bk-company-custom':'company_custom','bk-presenter':'presenter','bk-address':'address','bk-comments':'comments','bk-workflow':'workflow'};
+    document.getElementById(fid).value = b ? (b[map[fid]]||'') : '';
+  });
+  document.getElementById('bk-status').value = b?.status || 'Booked';
+  document.getElementById('bk-currency').value = b?.currency || 'USD';
+  document.getElementById('bk-rate').value = b?.rate || '';
+  document.getElementById('bk-billed').checked = !!b?.billed;
+  document.getElementById('bk-paid').checked = !!b?.paid;
+  populateFilters();
+  if (b?.company_name) document.getElementById('bk-company-select').value = b.company_name;
+  openModal('booking-modal');
+}
+
+function editBooking(id) { openBookingModal(id); }
+
+function openSpeakingModal(id = null) {
+  editingSpeakingId = id;
+  const s = id ? speaking.find(x => x.id === id) : null;
+  document.getElementById('speaking-modal-title').textContent = s ? 'Edit Speaking Engagement' : 'New Speaking Engagement';
+  document.getElementById('sp-id').value = id || '';
+  const map = {'sp-event':'event_name','sp-topic':'topic','sp-date':'date','sp-time':'time','sp-location':'location','sp-client':'client','sp-contact':'contact','sp-contact-email':'contact_email','sp-contact-phone':'contact_phone','sp-notes':'notes','sp-workflow':'workflow'};
+  Object.entries(map).forEach(([fid,key]) => { document.getElementById(fid).value = s ? (s[key]||'') : ''; });
+  document.getElementById('sp-type').value = s?.type || 'Keynote';
+  document.getElementById('sp-status').value = s?.status || 'Confirmed';
+  document.getElementById('sp-currency').value = s?.currency || 'USD';
+  document.getElementById('sp-rate').value = s?.rate || '';
+  document.getElementById('sp-billed').checked = !!s?.billed;
+  document.getElementById('sp-paid').checked = !!s?.paid;
+  openModal('speaking-modal');
+}
+
+function editSpeaking(id) { openSpeakingModal(id); }
+
+function openCompanyModal(id = null) {
+  editingCompanyId = id;
+  const c = id ? companies.find(x => x.id === id) : null;
+  document.getElementById('co-id').value = id || '';
+  const map = {'co-name':'name','co-city':'city','co-address':'address','co-contact':'contact','co-phone':'phone','co-email':'email','co-website':'website','co-notes':'notes'};
+  Object.entries(map).forEach(([fid,key]) => { document.getElementById(fid).value = c ? (c[key]||'') : ''; });
+  document.getElementById('co-category').value = c?.category || 'Technology';
+  document.getElementById('co-region').value = c?.region || '';
+  openModal('company-modal');
+}
+
+function editCompany(id) { openCompanyModal(id); }
+
+// ─── SAVE BOOKING ─────────────────────────────────────────
+async function saveBooking() {
+  const id = document.getElementById('bk-id').value;
+  const company_select = document.getElementById('bk-company-select').value;
+  const row = {
+    client: document.getElementById('bk-client').value.trim(),
+    contact: document.getElementById('bk-contact').value.trim(),
+    email: document.getElementById('bk-email').value.trim() || null,
+    phone: document.getElementById('bk-phone').value.trim() || null,
+    description: document.getElementById('bk-desc').value.trim() || null,
+    date: document.getElementById('bk-date').value || null,
+    time: document.getElementById('bk-time').value || null,
+    company_name: company_select || null,
+    company_custom: document.getElementById('bk-company-custom').value.trim() || null,
+    presenter: document.getElementById('bk-presenter').value.trim(),
+    address: document.getElementById('bk-address').value.trim(),
+    status: document.getElementById('bk-status').value,
+    currency: document.getElementById('bk-currency').value,
+    rate: parseFloat(document.getElementById('bk-rate').value) || null,
+    billed: document.getElementById('bk-billed').checked,
+    paid: document.getElementById('bk-paid').checked,
+    comments: document.getElementById('bk-comments').value.trim(),
+    workflow: document.getElementById('bk-workflow').value.trim(),
+  };
+
+  if (!row.contact) { toast('Contact name is required', 'error'); return; }
+
+  // Update local state first
+  if (id) {
+    const idx = bookings.findIndex(b => b.id === id);
+    if (idx !== -1) bookings[idx] = { ...bookings[idx], ...row };
+  } else {
+    row.id = 'bk_' + Date.now();
+    bookings.unshift(row);
+  }
+  try {
+    setSbStatus('loading', 'Saving…');
+    await saveToSupabase();
+    setSbStatus('ok', 'Saved ✓');
+    toast(id ? 'Booking updated' : 'Booking saved');
+    updateLastSync();
+  } catch(e) {
+    setSbStatus('err', 'Saved locally');
+    console.error('saveBooking error:', e);
+    toast('Saved locally (Supabase unreachable)', 'success');
+  }
+  saveToLocalStorage();
+  closeModal('booking-modal');
+  renderAll();
+}
+
+// ─── SAVE SPEAKING ────────────────────────────────────────
+async function saveSpeaking() {
+  const id = document.getElementById('sp-id').value;
+  const row = {
+    event_name: document.getElementById('sp-event').value.trim(),
+    type: document.getElementById('sp-type').value,
+    topic: document.getElementById('sp-topic').value.trim() || null,
+    date: document.getElementById('sp-date').value || null,
+    time: document.getElementById('sp-time').value || null,
+    location: document.getElementById('sp-location').value.trim() || null,
+    client: document.getElementById('sp-client').value.trim(),
+    contact: document.getElementById('sp-contact').value.trim(),
+    contact_email: document.getElementById('sp-contact-email').value.trim(),
+    contact_phone: document.getElementById('sp-contact-phone').value.trim(),
+    status: document.getElementById('sp-status').value,
+    currency: document.getElementById('sp-currency').value,
+    rate: parseFloat(document.getElementById('sp-rate').value) || null,
+    billed: document.getElementById('sp-billed').checked,
+    paid: document.getElementById('sp-paid').checked,
+    notes: document.getElementById('sp-notes').value.trim(),
+    workflow: document.getElementById('sp-workflow').value.trim(),
+  };
+
+  if (!row.event_name) { toast('Event name is required', 'error'); return; }
+
+  if (id) {
+    const idx = speaking.findIndex(s => s.id === id);
+    if (idx !== -1) speaking[idx] = { ...speaking[idx], ...row };
+  } else {
+    row.id = 'sp_' + Date.now();
+    speaking.unshift(row);
+  }
+  try {
+    setSbStatus('loading', 'Saving…');
+    await saveToSupabase();
+    setSbStatus('ok', 'Saved ✓');
+    toast(id ? 'Speaking engagement updated' : 'Speaking engagement saved');
+    updateLastSync();
+  } catch(e) {
+    setSbStatus('err', 'Saved locally');
+    console.error('saveSpeaking error:', e);
+    toast('Saved locally (Supabase unreachable)', 'success');
+  }
+  saveToLocalStorage();
+  closeModal('speaking-modal');
+  renderAll();
+}
+
+// ─── SAVE COMPANY ─────────────────────────────────────────
+async function saveCompany() {
+  const id = document.getElementById('co-id').value;
+  const row = {
+    name: document.getElementById('co-name').value.trim(),
+    category: document.getElementById('co-category').value,
+    region: document.getElementById('co-region').value || null,
+    city: document.getElementById('co-city').value.trim() || null,
+    address: document.getElementById('co-address').value.trim() || null,
+    contact: document.getElementById('co-contact').value.trim() || null,
+    phone: document.getElementById('co-phone').value.trim() || null,
+    email: document.getElementById('co-email').value.trim() || null,
+    website: document.getElementById('co-website').value.trim() || null,
+    notes: document.getElementById('co-notes').value.trim() || null,
+  };
+
+  if (!row.name) { toast('Company name is required', 'error'); return; }
+
+  if (id) {
+    const idx = companies.findIndex(c => c.id === id);
+    if (idx !== -1) companies[idx] = { ...companies[idx], ...row };
+  } else {
+    row.id = 'co_' + Date.now();
+    companies.unshift(row);
+  }
+  try {
+    setSbStatus('loading', 'Saving…');
+    await saveToSupabase();
+    setSbStatus('ok', 'Saved ✓');
+    toast(id ? 'Company updated' : 'Company saved');
+    updateLastSync();
+  } catch(e) {
+    setSbStatus('err', 'Saved locally');
+    console.error('saveCompany error:', e);
+    toast('Saved locally (Supabase unreachable)', 'success');
+  }
+  saveToLocalStorage();
+  closeModal('company-modal');
+  renderAll();
+}
+
+// ─── DELETE ───────────────────────────────────────────────
+async function deleteBooking(id) {
+  if (!confirm('Delete this booking?')) return;
+  bookings = bookings.filter(b => b.id !== id);
+  try { await saveToSupabase(); } catch(e) { console.error(e); }
+  saveToLocalStorage(); renderAll(); toast('Booking deleted');
+}
+
+async function deleteSpeaking(id) {
+  if (!confirm('Delete this speaking engagement?')) return;
+  speaking = speaking.filter(s => s.id !== id);
+  try { await saveToSupabase(); } catch(e) { console.error(e); }
+  saveToLocalStorage(); renderAll(); toast('Speaking engagement deleted');
+}
+
+async function deleteCompany(id) {
+  if (!confirm('Delete this company?')) return;
+  companies = companies.filter(c => c.id !== id);
+  try { await saveToSupabase(); } catch(e) { console.error(e); }
+  saveToLocalStorage(); renderAll(); toast('Company deleted');
+}
+
+// ─── LAST SYNC ────────────────────────────────────────────
+function updateLastSync() {
+  const now = new Date();
+  document.getElementById('last-sync-label').textContent = 'Synced ' + now.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
+}
+
+// ─── BACKUP / RESTORE ─────────────────────────────────────
+function copyBackup() {
+  const data = JSON.stringify({ bookings, speaking, companies, ts: Date.now() });
+  // Robust UTF-8 base64 encoding that handles Hebrew and special chars
+  const bytes = new TextEncoder().encode(data);
+  const b64 = btoa(String.fromCharCode(...bytes));
+  navigator.clipboard.writeText(b64).then(() => toast('Backup code copied to clipboard')).catch(() => {
+    document.getElementById('restore-input').value = b64;
+    openModal('restore-modal');
+    toast('Backup code ready – copy from the box', 'success');
+  });
+}
+
+function openRestore() { document.getElementById('restore-input').value = ''; openModal('restore-modal'); }
+
+async function restoreData() {
+  try {
+    const raw = document.getElementById('restore-input').value.trim();
+    if (!raw) { toast('Paste a backup code first', 'error'); return; }
+    let data;
+    // Try raw JSON first (handles Hebrew directly)
+    if (raw.startsWith('{')) {
+      data = JSON.parse(raw);
+    } else {
+      // Try base64 with multiple decode strategies
+      let decoded;
+      try {
+        // Modern approach: decode base64 to bytes, then UTF-8
+        const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+        decoded = new TextDecoder('utf-8').decode(bytes);
+      } catch(e1) {
+        try { decoded = decodeURIComponent(escape(atob(raw))); }
+        catch(e2) { decoded = atob(raw); }
+      }
+      data = JSON.parse(decoded);
+    }
+    if (!data.bookings && !data.speaking && !data.companies) throw new Error('Invalid backup');
+    if (!confirm(`Restore ${(data.bookings||[]).length} bookings, ${(data.speaking||[]).length} speaking engagements, ${(data.companies||[]).length} companies?`)) return;
+    bookings  = data.bookings  || [];
+    speaking  = data.speaking  || [];
+    companies = data.companies || [];
+    saveToLocalStorage();
+    if (supabaseOk) {
+      try { await saveToSupabase(); } catch(e) { /* ignore offline */ }
+    }
+    renderAll();
+    closeModal('restore-modal');
+    toast('Data restored and saved ✅');
+  } catch(e) {
+    toast('Restore failed: ' + e.message, 'error');
+  }
+}
+
+function copyAllData() {
+  const data = JSON.stringify({ bookings, speaking, companies, ts: Date.now() });
+  const b64 = btoa(unescape(encodeURIComponent(data)));
+  document.getElementById('restore-input').value = b64;
+  toast('Data encoded in the text box');
+}
+
+// ─── EXPORTS ──────────────────────────────────────────────
+function exportAll() {
+  const all = [
+    ...bookings.map(b=>({Type:'Delegation',...b})),
+    ...speaking.map(s=>({Type:'Speaking',...s}))
+  ];
+  exportToExcel(all, 'All_Bookings');
+}
+
+function exportDelBookings() { exportToExcel(bookings, 'Delegation_Bookings'); }
+function exportSpeaking() { exportToExcel(speaking, 'Speaking_Engagements'); }
+function exportCompanies() { exportToExcel(companies, 'Companies'); }
+
+function exportPayments() {
+  const all = [...bookings.map(b=>({...b,_type:'Delegation'})), ...speaking.map(s=>({...s,_type:'Speaking'}))];
+  exportToExcel(all.filter(b => b.billed || b.paid), 'Payments');
+}
+
+function exportToExcel(data, name) {
+  if (!data.length) { toast('No data to export', 'error'); return; }
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, name);
+  XLSX.writeFile(wb, `${name}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Exported ' + name);
+}
+
+// ─── CLOSE MODALS ON OVERLAY CLICK ───────────────────────
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+});
+
+// ─── START ────────────────────────────────────────────────
+init();
+</script>
+
+<!-- SQL SETUP HINT (remove before production) -->
+<!--
+  Run this SQL in your Supabase SQL Editor to create the tables:
+
+  CREATE TABLE IF NOT EXISTS bookings (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    client text, contact text, email text, phone text, description text,
+    date date, time text, company_name text, company_custom text,
+    presenter text, address text, status text, currency text DEFAULT 'USD',
+    rate numeric, billed boolean DEFAULT false, paid boolean DEFAULT false,
+    comments text, workflow text,
+    created_at timestamptz DEFAULT now()
+  );
+
+  CREATE TABLE IF NOT EXISTS speaking (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_name text, type text, topic text, date date, time text,
+    location text, client text, contact text, contact_email text,
+    contact_phone text, status text, currency text DEFAULT 'USD',
+    rate numeric, billed boolean DEFAULT false, paid boolean DEFAULT false,
+    notes text, workflow text,
+    created_at timestamptz DEFAULT now()
+  );
+
+  CREATE TABLE IF NOT EXISTS companies (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name text NOT NULL, category text, region text, city text,
+    address text, contact text, phone text, email text,
+    website text, notes text,
+    created_at timestamptz DEFAULT now()
+  );
+
+  -- Enable Row Level Security and add permissive policies:
+  ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE speaking ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+
+  CREATE POLICY "allow_all_bookings" ON bookings FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "allow_all_speaking" ON speaking FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "allow_all_companies" ON companies FOR ALL USING (true) WITH CHECK (true);
+-->
+</body>
+</html>
